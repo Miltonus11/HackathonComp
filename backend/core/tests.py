@@ -11,15 +11,19 @@ def authed(test, mobile='+639171234567'):
 
 
 class BarangayTests(APITestCase):
-    def test_requires_auth(self):
-        self.assertEqual(self.client.get('/api/barangays/').status_code, 401)
+    def test_is_public_because_registration_needs_it(self):
+        self.assertEqual(self.client.get('/api/barangays/').status_code, 200)
+
+    def test_stale_token_does_not_block_it(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer stale.token.value')
+        self.assertEqual(self.client.get('/api/barangays/').status_code, 200)
 
     def test_lists_barangays_without_psgc_noise(self):
-        authed(self)
-        Barangay.objects.create(name='Poro')
+        Barangay.objects.create(name='Poro', psgc_code='012812034')
         res = self.client.get('/api/barangays/')
         self.assertEqual(res.status_code, 200)
         self.assertEqual([b['name'] for b in res.data], ['Poro'])
+        self.assertNotIn('psgc_code', res.data[0])
 
 
 class ProfileTests(APITestCase):
