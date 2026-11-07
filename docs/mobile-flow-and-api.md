@@ -1,6 +1,6 @@
 # Daily flow spec: login, mood, journal, AI response
 
-The agreed flow that backend and mobile both build against. The endpoints in sections 3 to 5 are **to be built**; the contracts below are the agreement. Anything marked **Decision** was chosen while writing this and can be changed before building.
+The agreed flow that backend and mobile both build against. Sections 4 and 5 (mood and journal) are **built on the backend**; the contracts below match the code. Anything marked **Decision** was chosen while writing this and can be changed before building.
 
 Last updated: 2026-11-07
 
@@ -41,7 +41,7 @@ Then the app routes using what exists today:
 2. If `onboarding_completed_at` is `null`: send the user to the pre-assessment (`POST /api/screening/sessions/`).
 3. Otherwise: go to the daily mood screen (section 4).
 
-## 4. Daily mood (to be built)
+## 4. Daily mood (built)
 
 Slider **1 to 10**, where 10 is best. Label it a mood tracker, not an assessment. Optional one-tap reason.
 
@@ -70,7 +70,7 @@ When logged, `entry` is the object below. The app shows the mood screen whenever
 
 **Backend:** stores the number in `mood_entry` (unique per user per day). A sustained decline against the user's baseline will later suggest a short re-screen; that is out of scope for this spec.
 
-## 5. Journal (to be built)
+## 5. Journal (built)
 
 ### 5.1 Get today's prompt
 `GET /api/journal/prompt/`
@@ -84,9 +84,10 @@ When logged, `entry` is the object below. The app shows the mood screen whenever
 
 **How the backend picks the prompt**
 1. **Domain, by rules, not AI.** Rotate through the domains, leaning toward the domain that matches the user's recent low mood reason, or their highest-scoring items on a full PHQ-9 (item to domain: 1 interest, 2 mood, 3 sleep, 4 energy, 6 self-worth, 7 concentration; GAD-7 gives worry). Users who never took the full PHQ-9 just get rotation.
-2. **Text, from a reviewed bank.** Each domain has several clinician-reviewed prompts (`journal_prompt`, only `PUBLISHED` ones are served).
-3. **Optional AI wording.** The AI may rephrase the chosen prompt to sound personal and warm. Its output is checked (length, no diagnosis words, still asks about the same domain). If the AI is slow, down, or fails the check, the reviewed text is returned with `source: "bank"`.
-4. **Never PHQ-9 item 9.** Prompts never ask about self-harm.
+2. **Text, from a reviewed bank.** Each domain has several clinician-reviewed prompts (`journal_prompt`, only `PUBLISHED` ones are served). Each prompt has a **tone**: `GENTLE`, `NEUTRAL` or `UPBEAT`.
+3. **Tone follows today's mood score.** A low day (score 4 or less, or well below the user's own usual) prefers a `GENTLE` prompt; a high day (8 or more) prefers an `UPBEAT` one; otherwise any. The mood only tunes the tone: it never changes the topic, never raises a flag, and is never an assessment. If no mood is logged, tone is ignored.
+4. **Optional AI lead-in.** Only if the user has granted `AI_ANALYSIS` consent and AI is switched on, the AI writes **one short warm sentence placed before the reviewed question**. The reviewed question is kept word for word, so the AI can never change what is asked. The sentence is checked (no question mark, short, no diagnosis, medication, scores or links), and the result is cached for the day. If the AI is slow (4 second limit), down, or fails the checks, the plain reviewed text is returned with `source: "bank"`, and the server pauses AI attempts for that prompt for a minute so the screen is not slowed repeatedly.
+5. **Never PHQ-9 item 9.** Prompts never ask about self-harm.
 
 Free writing without a prompt is always allowed (`prompt_id` is optional when saving).
 
@@ -121,15 +122,19 @@ Errors: `400` for an empty or too long body (**Decision:** max 5,000 characters)
 
 **What the backend does, in this order**
 1. Saves the entry, encrypted per user. Errors here fail the whole request.
-2. **Crisis check, always, whatever the consent.** Keyword and phrase lists (English, Filipino, Taglish, Ilocano) first, then a classifier on the text. If it fires: create a risk flag (`JOURNAL_KEYWORD` or `JOURNAL_CLASSIFIER`) and the escalation record, skip the AI, return `ai_status: "crisis"` and the `crisis` payload. The check errs toward false alarms.
-3. If there is no crisis and the user holds an active `AI_ANALYSIS` consent: send the text to OpenAI **without any name, number, barangay or other identifier**, and return the reflection. Without consent: `no_consent`.
+2. **Keyword crisis check, always, whatever the consent.** Phrase lists (English, Filipino, Taglish, Ilocano). If it fires: create a risk flag (`JOURNAL_KEYWORD`) and the escalation record, skip the AI entirely, return `ai_status: "crisis"` and the `crisis` payload. Steps 1 and 2 happen in one database transaction. The check errs toward false alarms.
+3. **No `AI_ANALYSIS` consent (or AI switched off):** nothing is sent to OpenAI. Result is `no_consent` (or `unavailable` if the user consented but AI is off).
+4. **With consent, after the save has committed:** a second, AI-based **risk check** runs first. If it says the writer may be at risk, create a `JOURNAL_CLASSIFIER` flag and escalation and return `crisis`, with no encouraging reply. If the risk check itself fails or times out (5 seconds), no reply is generated (`unavailable`), because the entry cannot be confirmed safe.
+5. If the risk check is clear, the AI writes the **reflection** (10 second limit). It is checked before use; a reply that breaks any rule is discarded and the result is `unavailable`.
+
+What is sent to OpenAI: the journal text with phone numbers, emails and links replaced by placeholders, the reviewed prompt, the language, and today's mood in words (for example "3 out of 10, lower than usual for this person, main reason: sleep"). Never sent: name, mobile number, email, `user_id`, barangay, age, sex, sector, or any assessment result. Names or places the user types themselves cannot be removed reliably, which is why consent matters.
 
 **The AI reflection must:**
 - be short, warm and encouraging, in the user's language (English or Filipino);
 - reflect what the user wrote and may offer one gentle nudge, for example "You have mentioned poor sleep several times this week";
 - **never** diagnose, name a severity or score, mention medication, claim to be a therapist, or turn the text into a PHQ-9/GAD-7 result.
 
-Latency: the POST waits for the AI (backend timeout about 10 seconds, then `unavailable`). The app should show a loading state and treat `unavailable` as a normal outcome, since the entry is already saved.
+Latency: the POST waits for the AI. Typical replies take a few seconds; the worst case is about 15 seconds (5 for the risk check plus 10 for the reply), then `unavailable`. The app should show a loading state and treat `unavailable` as a normal outcome, since the entry is already saved. If the AI is switched off on the server, `ai_status` is `unavailable` immediately.
 
 ### 5.3 Read and delete
 - `GET /api/journal/` returns the user's entries, newest first: `[{entry_id, written_at, prompt_text, body, reflection}]`. Only the owner can read them.
@@ -143,22 +148,25 @@ Journal text is private. It is never visible to admins or staff, never used in a
 | Table | Key fields |
 |---|---|
 | `mood_entry` | `id, user, entry_date, mood_score (1-10, check constraint), reason_code, logged_at`. Unique `(user, entry_date)` |
-| `journal_prompt` | `id, domain_code, language_code, prompt_text, rotation_weight, review_status, is_active` |
+| `journal_prompt` | `id, domain_code, language_code, prompt_text, tone (GENTLE/NEUTRAL/UPBEAT), rotation_weight, review_status, reviewed_by, is_active` |
 | `journal_entry` | `id, user, prompt, body (encrypted), ai_reflection (encrypted), ai_analyzed, risk_scanned_at, written_at` |
 | `risk_flag` | existing. `source` already has `JOURNAL_KEYWORD` and `JOURNAL_CLASSIFIER`; `source_ref_type = JOURNAL_ENTRY` |
 
 ## 7. Settings and secrets
 
-- Backend `.env`: `OPENAI_API_KEY` (and a model name setting). It must never appear in the mobile app, the repo, or the API responses.
+- Backend `.env` (never in the mobile app, the repo, or API responses):
+  - `OPENAI_API_KEY` and `OPENAI_MODEL` (default `gpt-4o-mini`).
+  - `AI_FEATURES_ENABLED` (default **off**). The master switch for every AI feature. With it off, the app behaves exactly as if no one had consented: reviewed prompts, no reflections, `ai_status: "unavailable"` for consenting users.
+  - `AI_PROMPT_TIMEOUT` (4), `AI_RISK_TIMEOUT` (5), `AI_REFLECTION_TIMEOUT` (10), in seconds.
+  - `JOURNAL_ENCRYPTION_KEY`: master key for per-user journal encryption. Set a dedicated value in production and never change it, or existing entries become unreadable.
 - Open item: the city's DPO must accept sending de-identified text to OpenAI outside the country. Until that is decided, treat the AI reply as a demo feature that is off unless the user consents.
 
 ## 8. Build order
 
-1. **Mood:** model, the three endpoints, baseline, tests. No AI.
-2. **Journal without AI:** prompt bank and seed, rule-based domain choice, encrypted entries, crisis check (keywords), list and delete.
-3. **AI:** prompt wording, reflection, consent gating, timeouts and fallbacks.
-
-Mobile can build the mood screen against step 1 and the journal screens against step 2, then add the loading state for step 3.
+1. **Mood:** done.
+2. **Journal without AI:** done (prompt bank, tone, rule-based domain choice, encrypted entries, keyword crisis check, list and delete).
+3. **AI:** done (lead-in wording, risk check, reflection, consent gating, timeouts and fallbacks, output checks).
+4. **Nudges:** not built. A sustained mood decline will suggest a short PHQ-2 / GAD-2 re-screen.
 
 ## 9. Open questions
 
