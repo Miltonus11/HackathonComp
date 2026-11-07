@@ -49,7 +49,7 @@ const BarangayMap = dynamic(() => import("@/components/barangay-map"), {
 })
 
 type Instrument = "PHQ9" | "GAD7" | "WHO5"
-type MapMetric = "HIGH" | "SCREENINGS" | "ESCALATIONS"
+type MapMetric = "HIGH" | "ESCALATIONS"
 type GroupBy = "barangay_id" | "sector" | "age_band" | "sex"
 
 const monthLabel = (iso: string) =>
@@ -102,15 +102,7 @@ export default function DashboardPage() {
     const i = months.indexOf(e.period_month)
     return i >= filters.fromMonth && i <= filters.toMonth && (filters.barangay_id == null || e.barangay_id === filters.barangay_id)
   })
-  const sum = (k: keyof (typeof inRange)[number]) => inRange.reduce((s, e) => s + (e[k] as number), 0)
-  const engagement = {
-    started: sum("assessments_started"),
-    completed: sum("assessments_completed"),
-    rescreens: sum("rescreens_completed"),
-    suggested: sum("referrals_suggested"),
-    initiated: sum("referrals_initiated"),
-    escalations: sum("escalations_opened"),
-  }
+  const escalations = inRange.reduce((s, e) => s + e.escalations_opened, 0)
 
   const highBands = instrument === "WHO5" ? ["POOR", "LIKELY_DEPRESSION"] : ["MODERATE", "MODERATELY_SEVERE", "SEVERE"]
   const highVisible = highBands.every((b) => bands[b] && !bands[b].suppressed)
@@ -170,7 +162,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-3">
           <Kpi
             label={`${instrumentLabels[instrument]} moderate or higher`}
             value={highVisible ? highCount.toLocaleString() : "<5"}
@@ -179,15 +171,8 @@ export default function DashboardPage() {
             onClick={() => setMapMetric("HIGH")}
           />
           <Kpi
-            label="Screenings completed"
-            value={<CellValue cell={total} />}
-            hint={`${scope} · ${pct(engagement.completed, engagement.started)} of started screenings finished`}
-            active={mapMetric === "SCREENINGS"}
-            onClick={() => setMapMetric("SCREENINGS")}
-          />
-          <Kpi
             label="High-risk escalations"
-            value={engagement.escalations < SUPPRESSION_THRESHOLD ? "<5" : engagement.escalations.toLocaleString()}
+            value={escalations < SUPPRESSION_THRESHOLD ? "<5" : escalations.toLocaleString()}
             hint={`${scope} · sent to case officers${demographicFilter ? " · barangay and date filters only" : ""}`}
             active={mapMetric === "ESCALATIONS"}
             onClick={() => setMapMetric("ESCALATIONS")}
@@ -281,42 +266,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-4 lg:grid-cols-5">
-          <MoodTrend barangayId={filters.barangay_id} />
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>Program activity</CardTitle>
-              <CardDescription>
-                {barangay === ALL ? "All barangays" : barangayName(+barangay)}, selected months
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <dl className="divide-y text-sm">
-                {[
-                  ["Screenings started", engagement.started],
-                  ["Screenings completed", engagement.completed],
-                  ["Repeat screenings", engagement.rescreens],
-                  ["Referrals shown", engagement.suggested],
-                  ["Referrals acted on", engagement.initiated],
-                  ["High-risk escalations", engagement.escalations],
-                ].map(([k, v]) => (
-                  <div key={k} className="flex justify-between py-2">
-                    <dt className="text-muted-foreground">{k}</dt>
-                    <dd className="font-medium tabular-nums">
-                      {(v as number) < SUPPRESSION_THRESHOLD ? "<5" : v.toLocaleString()}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-              {demographicFilter && (
-                <p className="mt-3 flex gap-1.5 text-xs text-muted-foreground">
-                  <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
-                  Activity counts are kept by barangay and month only, so sector, age and sex filters don&apos;t apply here.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <MoodTrend barangayId={filters.barangay_id} />
       </PageBody>
     </RoleGate>
   )
@@ -339,19 +289,17 @@ function BarangayMapCard({
 }) {
   const metricLabels: Record<MapMetric, string> = {
     HIGH: `${instrumentLabels[instrument]} moderate or higher`,
-    SCREENINGS: "Screenings completed",
     ESCALATIONS: "High-risk escalations",
   }
 
   const points = barangays.map((b) => {
     const s = screening.find((x) => x.barangay_id === b.barangay_id)!
-    let cell = s.total
+    let cell = s.high
     let detail: string | undefined
     if (metric === "HIGH") {
-      cell = s.high
       if (!s.high.suppressed && !s.total.suppressed && s.total.count)
         detail = `${Math.round((s.high.count! / s.total.count) * 100)}% of ${s.total.count} screened`
-    } else if (metric === "ESCALATIONS") {
+    } else {
       // Escalation counts come from agg_engagement_monthly, which has no sector/age/sex split.
       const n = engagementMonthly
         .filter((e) => {
@@ -507,7 +455,7 @@ function MoodTrend({ barangayId }: { barangayId?: number }) {
   const last = [...points].reverse().find((p) => p.value != null)
 
   return (
-    <Card className="lg:col-span-3">
+    <Card>
       <CardHeader>
         <CardTitle>Mood check-in trend</CardTitle>
         <CardDescription>
