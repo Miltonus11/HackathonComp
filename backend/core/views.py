@@ -1,4 +1,4 @@
-from rest_framework import generics, status
+from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -7,6 +7,9 @@ from .serializers import BarangaySerializer, ConsentSerializer, ProfileSerialize
 
 
 class BarangayListView(generics.ListAPIView):
+    # Public: the registration form needs the list before the account exists.
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
     queryset = Barangay.objects.all()
     serializer_class = BarangaySerializer
 
