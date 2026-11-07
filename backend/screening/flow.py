@@ -2,6 +2,8 @@
 
 WHO-5 first, then GAD-7. PHQ-9 follows only when WHO-5 suggests poor wellbeing
 (scaled score below 52, i.e. raw below 13). [VERIFY] threshold against the official WHO-5 guide.
+Otherwise a one-question PHQ-9 item 9 check (PHQ9_ITEM9) is asked, so self-harm thoughts are
+screened for every user whatever their WHO-5 score.
 """
 from decimal import Decimal
 
@@ -18,6 +20,7 @@ def next_instrument(done):
         return 'WHO5'
     if 'GAD7' not in done:
         return 'GAD7'
-    if phq9_needed(done['WHO5']) and 'PHQ9' not in done:
-        return 'PHQ9'
-    return None
+    if phq9_needed(done['WHO5']):
+        return None if 'PHQ9' in done else 'PHQ9'
+    # PHQ-9 is skipped, but the self-harm question is never skipped: ask item 9 on its own.
+    return None if 'PHQ9_ITEM9' in done else 'PHQ9_ITEM9'

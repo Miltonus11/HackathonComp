@@ -5,8 +5,8 @@ from safety.models import Escalation, RiskFlag
 from screening import services
 from screening.models import Assessment, AssessmentResponse, AssessmentSession
 
-from .helpers import (GAD7_MINIMAL, GAD7_SEVERE, PHQ9_MINIMAL, PHQ9_SEVERE, WHO5_GOOD, WHO5_POOR, WHO5_VERY_LOW,
-                      make_user, phq9_item9_only, seed)
+from .helpers import (GAD7_MINIMAL, GAD7_SEVERE, ITEM9_NEGATIVE, ITEM9_POSITIVE, PHQ9_MINIMAL, PHQ9_SEVERE,
+                      WHO5_GOOD, WHO5_POOR, WHO5_VERY_LOW, make_user, phq9_item9_only, seed)
 
 
 class ServiceTestBase(TestCase):
@@ -46,15 +46,17 @@ class StartSessionTests(ServiceTestBase):
 
 
 class AdaptiveFlowTests(ServiceTestBase):
-    def test_good_wellbeing_skips_phq9(self):
+    def test_good_wellbeing_skips_phq9_but_asks_item9_only(self):
         s = self.start().session
         self.assertEqual(services.submit_instrument(s, 'WHO5', WHO5_GOOD).next_instrument, 'GAD7')
         step = services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
-        self.assertIsNone(step.next_instrument)
+        self.assertEqual(step.next_instrument, 'PHQ9_ITEM9')
+        self.assertFalse(step.completed)
+        step = services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
         self.assertTrue(step.completed)
         s.refresh_from_db()
         self.assertIsNotNone(s.completed_at)
-        self.assertEqual(s.assessments.count(), 2)
+        self.assertEqual(sorted(a.instrument.code for a in s.assessments.all()), ['GAD7', 'PHQ9_ITEM9', 'WHO5'])
 
     def test_poor_wellbeing_adds_phq9(self):
         s = self.start().session
@@ -72,17 +74,25 @@ class AdaptiveFlowTests(ServiceTestBase):
             services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
         self.assertEqual(ctx.exception.code, 'wrong_instrument')
 
-    def test_phq9_rejected_when_not_needed(self):
+    def test_full_phq9_rejected_when_not_needed(self):
         s = self.start().session
         services.submit_instrument(s, 'WHO5', WHO5_GOOD)
         services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
         with self.assertRaises(services.FlowError):
             services.submit_instrument(s, 'PHQ9', PHQ9_MINIMAL)
 
+    def test_item9_check_rejected_when_full_phq9_is_due(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        with self.assertRaises(services.FlowError):
+            services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
+
     def test_cannot_submit_after_completion(self):
         s = self.start().session
         services.submit_instrument(s, 'WHO5', WHO5_GOOD)
         services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
         with self.assertRaises(services.FlowError) as ctx:
             services.submit_instrument(s, 'WHO5', WHO5_GOOD)
         self.assertEqual(ctx.exception.code, 'session_complete')
@@ -99,6 +109,7 @@ class AdaptiveFlowTests(ServiceTestBase):
         s = self.start().session
         services.submit_instrument(s, 'WHO5', WHO5_GOOD)
         services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
         self.user.profile.refresh_from_db()
         self.assertIsNotNone(self.user.profile.onboarding_completed_at)
 
@@ -163,6 +174,29 @@ class CrisisRuleTests(ServiceTestBase):
         self.assertEqual(Escalation.objects.count(), 1)
         self.assertEqual(Escalation.objects.get().flag.level, 'CRISIS')
 
+    def test_good_wellbeing_user_with_item9_positive_is_still_flagged(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_GOOD)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        step = services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_POSITIVE)
+        self.assertTrue(step.crisis)
+        self.assertEqual(step.score.severity_code, 'POSITIVE')
+        flag = RiskFlag.objects.get()  # exactly one: no duplicate SEVERE_SCORE flag
+        self.assertEqual((flag.source, flag.level), ('PHQ9_ITEM9', 'CRISIS'))
+        self.assertEqual(Escalation.objects.get().flag, flag)
+        s.refresh_from_db()
+        self.assertTrue(s.crisis_shown)
+        self.assertIsNotNone(s.completed_at)
+
+    def test_item9_check_negative_raises_nothing(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_GOOD)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        step = services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
+        self.assertEqual(step.score.severity_code, 'NEGATIVE')
+        self.assertFalse(step.crisis)
+        self.assertEqual(RiskFlag.objects.count(), 0)
+
     def test_no_flags_for_benign_answers(self):
         s = self.start().session
         services.submit_instrument(s, 'WHO5', WHO5_GOOD)
@@ -202,6 +236,25 @@ class PresentationTests(ServiceTestBase):
         self.assertTrue(payload['hotlines'])
         self.assertTrue(payload['talk_to_a_person'])
         self.assertTrue(payload['message'])
+
+    def test_crisis_payload_prefers_directory_crisis_services(self):
+        from django.conf import settings
+        from referrals.models import Service
+        Service.objects.create(name='Local Crisis Line', service_type='HOTLINE', phone='0999-111-2222',
+                               cost_type='FREE', is_crisis_service=True, schedule_text='24/7')
+        hotlines = services.crisis_payload(self.user)['hotlines']
+        self.assertEqual(hotlines, [{'name': 'Local Crisis Line', 'number': '0999-111-2222', 'note': '24/7'}])
+        self.assertNotEqual(hotlines, list(settings.CRISIS_HOTLINES))
+
+    def test_crisis_payload_ignores_inactive_or_phoneless_directory_entries(self):
+        from django.conf import settings
+        from referrals.models import Service
+        Service.objects.create(name='Off', service_type='HOTLINE', phone='1', cost_type='FREE',
+                               is_crisis_service=True, is_active=False)
+        Service.objects.create(name='No number', service_type='HOTLINE', phone='', cost_type='FREE',
+                               is_crisis_service=True)
+        Service.objects.create(name='Not crisis', service_type='NGO', phone='5', cost_type='FREE')
+        self.assertEqual(services.crisis_payload(self.user)['hotlines'], list(settings.CRISIS_HOTLINES))
 
     def test_crisis_payload_falls_back_when_no_advice_row(self):
         from screening.models import AdviceContent

@@ -37,6 +37,10 @@ PHQ9_MINIMAL = uniform(9, 0)
 PHQ9_SEVERE = uniform(9, 3)    # 27
 
 
+ITEM9_NEGATIVE = {1: 0}
+ITEM9_POSITIVE = {1: 1}
+
+
 def phq9_item9_only():
     r = uniform(9, 0)
     r[9] = 1

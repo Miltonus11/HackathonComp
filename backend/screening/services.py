@@ -165,6 +165,14 @@ def crisis_payload(user):
     return {
         'headline': row.headline if row else FALLBACK_CRISIS['headline'],
         'message': row.message_body if row else FALLBACK_CRISIS['message'],
-        'hotlines': list(settings.CRISIS_HOTLINES),
+        'hotlines': _hotlines(),
         'talk_to_a_person': True,
     }
+
+
+def _hotlines():
+    """Crisis contacts from the referral directory; settings.CRISIS_HOTLINES if the directory has none."""
+    from referrals.models import Service
+    rows = Service.objects.filter(is_crisis_service=True, is_active=True).exclude(phone='').order_by('name')
+    found = [{'name': s.name, 'number': s.phone, 'note': s.schedule_text} for s in rows]
+    return found or list(settings.CRISIS_HOTLINES)
