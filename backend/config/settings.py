@@ -152,6 +152,14 @@ REST_FRAMEWORK = {
 
 AUTH_USER_MODEL = 'accounts.User'
 
+# Shown on the crisis screen. [VERIFY] every number with the City Health Office before launch.
+CRISIS_HOTLINES = [
+    {'name': 'NCMH Crisis Hotline', 'number': '1553', 'note': 'National Center for Mental Health'},
+    {'name': 'NCMH Crisis Hotline (mobile)', 'number': '0917-899-8727', 'note': 'National Center for Mental Health'},
+    {'name': 'Hopeline PH', 'number': '0917-558-4673', 'note': 'Natasha Goulbourn Foundation'},
+    {'name': 'National Emergency Hotline', 'number': '911', 'note': 'Immediate danger'},
+]
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=config('JWT_ACCESS_MINUTES', default=30, cast=int)),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=config('JWT_REFRESH_DAYS', default=7, cast=int)),
