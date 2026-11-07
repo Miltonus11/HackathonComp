@@ -3,7 +3,8 @@
 import { useState } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
-import { InfoIcon } from "lucide-react"
+import { cn } from "cn"
+import { InfoIcon, MapIcon } from "lucide-react"
 
 import { ALL, FilterSelect } from "@/components/filter-select"
 import { PageBody, PageHeader } from "@/components/page-header"
@@ -115,6 +116,11 @@ export default function DashboardPage() {
   const highVisible = highBands.every((b) => bands[b] && !bands[b].suppressed)
   const highCount = highBands.reduce((s, b) => s + (bands[b]?.count ?? 0), 0)
 
+  // The map always shows every barangay; the barangay filter only highlights one.
+  const cityScreening = screeningHighByBarangay({ ...filters, barangay_id: undefined }, instrument)
+  const reached = cityScreening.filter((s) => !s.total.suppressed).length
+  const scope = barangay === ALL ? "City-wide" : barangayName(+barangay)
+
   const monthOptions = months.map((m, i) => ({ value: String(i), label: monthLabel(m) }))
 
   return (
@@ -165,31 +171,39 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Screenings completed" value={<CellValue cell={total} />} hint="People who completed a full screening" />
           <Kpi
             label={`${instrumentLabels[instrument]} moderate or higher`}
-            value={highVisible ? pct(highCount, total.count ?? 0) : "<5"}
-            hint={instrument === "WHO5" ? "Poor wellbeing or likely depression" : "Moderate, moderately severe or severe"}
+            value={highVisible ? highCount.toLocaleString() : "<5"}
+            hint={`${scope} · ${highVisible ? `${pct(highCount, total.count ?? 0)} of screenings` : "hidden, fewer than 5"}`}
+            active={mapMetric === "HIGH"}
+            onClick={() => setMapMetric("HIGH")}
           />
           <Kpi
-            label="Completion rate"
-            value={pct(engagement.completed, engagement.started)}
-            hint={`${engagement.completed.toLocaleString()} of ${engagement.started.toLocaleString()} started`}
-            scoped={demographicFilter}
+            label="Screenings completed"
+            value={<CellValue cell={total} />}
+            hint={`${scope} · ${pct(engagement.completed, engagement.started)} of started screenings finished`}
+            active={mapMetric === "SCREENINGS"}
+            onClick={() => setMapMetric("SCREENINGS")}
           />
           <Kpi
-            label="Referral uptake"
-            value={pct(engagement.initiated, engagement.suggested)}
-            hint={`${engagement.initiated} contacted a service of ${engagement.suggested} shown`}
-            scoped={demographicFilter}
+            label="High-risk escalations"
+            value={engagement.escalations < SUPPRESSION_THRESHOLD ? "<5" : engagement.escalations.toLocaleString()}
+            hint={`${scope} · sent to case officers${demographicFilter ? " · barangay and date filters only" : ""}`}
+            active={mapMetric === "ESCALATIONS"}
+            onClick={() => setMapMetric("ESCALATIONS")}
+          />
+          <Kpi
+            label="Barangays reached"
+            value={`${reached} / ${barangays.length}`}
+            hint={`With ${SUPPRESSION_THRESHOLD} or more screenings; the rest show grey on the map`}
           />
         </div>
 
         <BarangayMapCard
           filters={filters}
           instrument={instrument}
+          screening={cityScreening}
           metric={mapMetric}
-          onMetricChange={setMapMetric}
           selectedId={filters.barangay_id}
           onSelect={(id) => setBarangay((prev) => (prev === String(id) ? ALL : String(id)))}
         />
@@ -311,22 +325,18 @@ export default function DashboardPage() {
 function BarangayMapCard({
   filters,
   instrument,
+  screening,
   metric,
-  onMetricChange,
   selectedId,
   onSelect,
 }: {
   filters: ScreeningFilters
   instrument: Instrument
+  screening: ReturnType<typeof screeningHighByBarangay>
   metric: MapMetric
-  onMetricChange: (m: MapMetric) => void
   selectedId?: number
   onSelect: (id: number) => void
 }) {
-  // The map always shows every barangay; the barangay filter only highlights one.
-  const cityWide = { ...filters, barangay_id: undefined }
-  const screening = screeningHighByBarangay(cityWide, instrument)
-
   const metricLabels: Record<MapMetric, string> = {
     HIGH: `${instrumentLabels[instrument]} moderate or higher`,
     SCREENINGS: "Screenings completed",
@@ -363,20 +373,11 @@ function BarangayMapCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cases by barangay</CardTitle>
+        <CardTitle>{metricLabels[metric]} by barangay</CardTitle>
         <CardDescription>
-          All 59 barangays, shaded by count for the selected filters. Darker means more people. Click a barangay to
-          filter the dashboard.
+          All {barangays.length} barangays, shaded by count for the selected filters. Darker means more people. Pick a
+          card above to change what the map shows; click a barangay to filter the dashboard.
         </CardDescription>
-        <CardAction>
-          <FilterSelect
-            label="Show"
-            value={metric}
-            onChange={(v) => onMetricChange(v as MapMetric)}
-            className="w-60"
-            options={(Object.keys(metricLabels) as MapMetric[]).map((m) => ({ value: m, label: metricLabels[m] }))}
-          />
-        </CardAction>
       </CardHeader>
       <CardContent className="grid gap-4 lg:grid-cols-3">
         <div className="flex flex-col gap-2 lg:col-span-2">
@@ -434,24 +435,43 @@ function Kpi({
   label,
   value,
   hint,
-  scoped,
+  active,
+  onClick,
 }: {
   label: string
   value: React.ReactNode
   hint: string
-  scoped?: boolean
+  active?: boolean
+  /** When set, the card switches the map to this metric. */
+  onClick?: () => void
 }) {
-  return (
-    <Card size="sm">
+  const card = (
+    <Card size="sm" className={cn("h-full", active && "ring-2 ring-primary")}>
       <CardHeader>
         <CardDescription>{label}</CardDescription>
         <CardTitle className="text-3xl font-semibold tabular-nums">{value}</CardTitle>
+        {onClick && (
+          <CardAction>
+            <MapIcon className={cn("size-4", active ? "text-primary" : "text-muted-foreground")} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="text-xs text-muted-foreground">
         {hint}
-        {scoped && <span className="block">Barangay and date filters only</span>}
+        {active && <span className="mt-1 block font-medium text-primary">Shown on map</span>}
       </CardContent>
     </Card>
+  )
+  if (!onClick) return card
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className="rounded-xl text-left transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-primary"
+    >
+      {card}
+    </button>
   )
 }
 
