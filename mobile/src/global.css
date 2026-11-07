@@ -6,6 +6,52 @@
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace;
   --font-rounded: 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif;
   --font-serif: Georgia, 'Times New Roman', serif;
+
+  /*
+   * Palette ported from the web shadcn theme ("globals (1).css"). The source uses oklch();
+   * values are converted to hex here so they render identically on iOS, Android and web.
+   */
+  --background: #f4f1ea; /* warm cream, matches the EunoiApp logo */
+  --foreground: #2f2a3d; /* deep plum ink */
+  --card: #fbf9f5;
+  --card-foreground: #2f2a3d;
+  --popover: #fbf9f5;
+  --popover-foreground: #2f2a3d;
+  --primary: #6d6193; /* logo purple */
+  --primary-foreground: #fbf9f5;
+  --secondary: #e8e3f0; /* soft lavender */
+  --secondary-foreground: #4a3f6b;
+  --muted: #ece8df;
+  --muted-foreground: #766f86;
+  --accent: #e8e3f0;
+  --accent-foreground: #4a3f6b;
+  --destructive: #b4544f;
+  --border: #e3ddd2;
+  --input: #d9d2c6;
+  --ring: #a299b8;
+  --radius: 1rem;
+}
+
+/* Dark values kept for later. The app is pinned to light (app.json userInterfaceStyle). */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #171717;
+  --card-foreground: #fafafa;
+  --popover: #171717;
+  --popover-foreground: #fafafa;
+  --primary: #5d0ec0; /* oklch(0.432 0.232 292.759) */
+  --primary-foreground: #f5f3ff;
+  --secondary: #27272a;
+  --secondary-foreground: #fafafa;
+  --muted: #262626;
+  --muted-foreground: #a1a1a1;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
+  --destructive: #ff6467; /* oklch(0.704 0.191 22.216) */
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.15);
+  --ring: #737373;
 }
 
 @tailwind base;

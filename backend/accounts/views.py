@@ -3,11 +3,12 @@ from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .serializers import RegisterSerializer, UserSerializer
+from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
+    authentication_classes = []  # a stale/invalid Bearer header must not 401 a public endpoint
     permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
@@ -26,8 +27,10 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LoginView(TokenObtainPairView):
-    """POST email + password -> access/refresh tokens."""
+    """POST mobile_number + password -> access/refresh tokens."""
 
+    serializer_class = LoginSerializer
+    authentication_classes = []
     permission_classes = [permissions.AllowAny]
 
 
@@ -36,3 +39,5 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+# Test backend
