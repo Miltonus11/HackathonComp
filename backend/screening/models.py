@@ -127,6 +127,8 @@ class AssessmentSession(models.Model):
     started_at = models.DateTimeField(default=timezone.now)
     completed_at = models.DateTimeField(null=True, blank=True)
     crisis_shown = models.BooleanField(default=False)
+    # Not-good WHO-5 only: did the person agree to the full PHQ-9? None = not asked yet.
+    phq9_accepted = models.BooleanField(null=True, blank=True)
 
     def __str__(self):
         return f'{self.session_type} session {self.id}'

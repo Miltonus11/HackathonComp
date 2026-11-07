@@ -44,6 +44,14 @@ class StepResult:
     crisis: bool = False
     next_instrument: str | None = None
     completed: bool = False
+    choice_pending: bool = False  # the person must decide whether to take the full PHQ-9
+
+
+@dataclass
+class ChoiceResult:
+    session: AssessmentSession
+    next_instrument: str | None
+    completed: bool
 
 
 def _language(user):
@@ -84,8 +92,11 @@ def submit_instrument(session, code, responses):
         raise FlowError('session_complete', 'This screening is already complete.')
 
     done = _done_map(session)
-    expected = flow.next_instrument(done)
+    accepted = session.phq9_accepted
+    expected = flow.next_instrument(done, accepted)
     if code != expected:
+        if flow.pending_choice(done, accepted):
+            raise FlowError('choice_required', 'Choose whether to continue before answering more questions.')
         raise FlowError('wrong_instrument', f'Expected {expected}, got {code}.')
 
     inst = Instrument.objects.get(code=code, is_active=True)
@@ -111,21 +122,52 @@ def submit_instrument(session, code, responses):
     flags = _raise_flags(session.user, code, assessment, result)
 
     done[code] = result.scaled_score
-    next_code = flow.next_instrument(done)
+    next_code = flow.next_instrument(done, accepted)
+    pending = flow.pending_choice(done, accepted)
+    finished = next_code is None and not pending
     update = []
     if flags:
         session.crisis_shown = True
         update.append('crisis_shown')
-    if next_code is None:
-        session.completed_at = timezone.now()
-        update.append('completed_at')
-        UserProfile.objects.filter(user=session.user, onboarding_completed_at__isnull=True).update(
-            onboarding_completed_at=session.completed_at)
+    if finished:
+        _mark_completed(session, update)
     if update:
         session.save(update_fields=update)
 
     return StepResult(session=session, assessment=assessment, score=result, flags=flags,
-                      crisis=bool(flags), next_instrument=next_code, completed=next_code is None)
+                      crisis=bool(flags), next_instrument=next_code, completed=finished,
+                      choice_pending=pending)
+
+
+def _mark_completed(session, update):
+    """Stamp completion on the session and mark the person's onboarding done. The caller saves the update list."""
+    session.completed_at = timezone.now()
+    update.append('completed_at')
+    UserProfile.objects.filter(user=session.user, onboarding_completed_at__isnull=True).update(
+        onboarding_completed_at=session.completed_at)
+
+
+@transaction.atomic
+def answer_phq9_choice(session, accept):
+    """Record whether a not-good-WHO-5 person wants the full PHQ-9.
+
+    Accepting makes PHQ9 the next instrument. Declining ends the session now: no PHQ-9 questions
+    and no separate item 9 check are asked, and the results are just WHO-5 and GAD-7.
+    """
+    session = AssessmentSession.objects.select_for_update().get(pk=session.pk)
+    if session.completed_at:
+        raise FlowError('session_complete', 'This screening is already complete.')
+    done = _done_map(session)
+    if not flow.pending_choice(done, session.phq9_accepted):
+        raise FlowError('no_choice_pending', 'There is no choice to make right now.')
+
+    session.phq9_accepted = bool(accept)
+    update = ['phq9_accepted']
+    next_code = flow.next_instrument(done, session.phq9_accepted)
+    if next_code is None:
+        _mark_completed(session, update)
+    session.save(update_fields=update)
+    return ChoiceResult(session=session, next_instrument=next_code, completed=next_code is None)
 
 
 def _raise_flags(user, code, assessment, result):

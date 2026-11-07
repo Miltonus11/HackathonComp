@@ -29,6 +29,9 @@ class ScreeningApiBase(APITestCase):
     def answer(self, sid, code, answers):
         return self.client.post(f'{SESSIONS}{sid}/answers/', body(code, answers), format='json')
 
+    def choose(self, sid, accept):
+        return self.client.post(f'{SESSIONS}{sid}/choice/', {'accept': accept}, format='json')
+
 
 class StartTests(ScreeningApiBase):
     def test_requires_auth(self):
@@ -83,19 +86,90 @@ class FlowTests(ScreeningApiBase):
         self.assertTrue(res.data['completed'])
         self.assertEqual(RiskFlag.objects.get().level, 'CRISIS')
 
-    def test_poor_wellbeing_path_adds_phq9(self):
+    def test_poor_wellbeing_asks_the_person_before_phq9(self):
         sid = self.start()['session_id']
         self.answer(sid, 'WHO5', WHO5_POOR)
         r2 = self.answer(sid, 'GAD7', GAD7_MINIMAL)
-        self.assertEqual(r2.data['next']['instrument'], 'PHQ9')
-        self.assertEqual(len(r2.data['next']['items']), 9)
+        self.assertIsNone(r2.data['next'])
+        self.assertFalse(r2.data['completed'])
+        self.assertEqual(r2.data['choice'], 'MOOD_QUESTIONS')
+
+    def test_accepting_the_choice_returns_the_phq9_form(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_POOR)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        res = self.choose(sid, True)
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data['next']['instrument'], 'PHQ9')
+        self.assertEqual(len(res.data['next']['items']), 9)
+        self.assertFalse(res.data['completed'])
+        self.assertIsNone(res.data['choice'])
         r3 = self.answer(sid, 'PHQ9', PHQ9_MINIMAL)
         self.assertTrue(r3.data['completed'])
+        self.assertIsNone(r3.data['choice'])
+
+    def test_declining_goes_to_results_with_only_wellbeing_and_anxiety(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_POOR)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        res = self.choose(sid, False)
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertTrue(res.data['completed'])
+        self.assertIsNone(res.data['next'])
+        detail = self.client.get(f'{SESSIONS}{sid}/').data
+        self.assertTrue(detail['completed'])
+        self.assertIsNone(detail['choice'])
+        self.assertEqual([r['instrument'] for r in detail['results']], ['WHO5', 'GAD7'])
+
+    def test_phq9_before_the_choice_is_rejected(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_POOR)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        res = self.answer(sid, 'PHQ9', PHQ9_MINIMAL)
+        self.assertEqual((res.status_code, res.data['code']), (400, 'choice_required'))
+
+    def test_detail_while_choice_pending_resumes_at_the_choice(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_POOR)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        data = self.client.get(f'{SESSIONS}{sid}/').data
+        self.assertEqual(data['choice'], 'MOOD_QUESTIONS')
+        self.assertIsNone(data['next'])
+        self.assertFalse(data['completed'])
+
+    def test_good_wellbeing_never_gets_a_choice(self):
+        sid = self.start()['session_id']
+        r1 = self.answer(sid, 'WHO5', WHO5_GOOD)
+        r2 = self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        self.assertIsNone(r1.data['choice'])
+        self.assertIsNone(r2.data['choice'])
+        res = self.choose(sid, True)
+        self.assertEqual((res.status_code, res.data['code']), (400, 'no_choice_pending'))
+
+    def test_choice_validation_and_ownership(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_POOR)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        self.assertEqual(self.client.post(f'{SESSIONS}{sid}/choice/', {}, format='json').status_code, 400)
+        self.assertEqual(self.client.post(f'{SESSIONS}{sid}/choice/', {'accept': 'maybe'}, format='json').status_code, 400)
+        self.client.force_authenticate(make_user('+639171230006'))
+        self.assertEqual(self.choose(sid, True).status_code, 404)
+        self.client.force_authenticate(None)
+        self.assertEqual(self.choose(sid, True).status_code, 401)
+
+    def test_choice_after_completion_is_409(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_POOR)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        self.choose(sid, False)
+        res = self.choose(sid, True)
+        self.assertEqual((res.status_code, res.data['code']), (409, 'session_complete'))
 
     def test_item9_returns_crisis_block_first(self):
         sid = self.start()['session_id']
         self.answer(sid, 'WHO5', WHO5_POOR)
         self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        self.choose(sid, True)
         res = self.answer(sid, 'PHQ9', phq9_item9_only())
         self.assertEqual(res.data['result']['severity_code'], 'MINIMAL')
         crisis = res.data['crisis']
