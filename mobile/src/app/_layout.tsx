@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AuthProvider, useAuth } from '@/lib/auth';
+import { MoodProvider } from '@/lib/mood-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,7 +36,9 @@ export default function RootLayout() {
     <ThemeProvider value={DefaultTheme}>
       <AuthProvider>
         <AnimatedSplashOverlay />
-        <RootStack />
+        <MoodProvider>
+          <RootStack />
+        </MoodProvider>
       </AuthProvider>
     </ThemeProvider>
   );

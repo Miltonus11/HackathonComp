@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
+import { MoodGate } from '@/components/mood-gate';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import type { SessionSummary } from '@/domain/screening';
@@ -8,11 +9,6 @@ import { useAssessmentUi } from '@/lib/use-assessment-ui';
 import { useAssessmentStatus } from '@/lib/use-assessment-status';
 import { useAuth } from '@/lib/auth';
 import { USE_MOCK } from '@/services/config';
-
-const humanize = (code: string) => {
-  const s = code.toLowerCase().replace(/_/g, ' ');
-  return s.charAt(0).toUpperCase() + s.slice(1);
-};
 
 export default function Home() {
   const { session, signOut } = useAuth();
@@ -28,6 +24,8 @@ export default function Home() {
 
   return (
     <Screen footer={<Button title="Log out" variant="secondary" onPress={handleSignOut} />}>
+      {/* Returning users: the daily mood dialog shows here once a day. First-timers meet it in Journal. */}
+      <MoodGate where="home" />
       <View className="gap-2 pt-6">
         <Text className="text-3xl font-bold text-foreground">Hello, {name}</Text>
         <Text className="text-base text-muted-foreground">
@@ -86,17 +84,6 @@ function DoneSummary({ last, onAgain }: { last: SessionSummary; onAgain: () => v
   return (
     <>
       <Text className="text-base text-muted-foreground">{ui.home.lastDone(date)}</Text>
-      <View className="flex-row flex-wrap gap-2">
-        {last.results.map((r) => (
-          <View key={r.instrument} className="rounded-full bg-secondary px-3 py-1">
-            <Text className="text-sm font-medium text-secondary-foreground">
-              {ui.instrumentTitle[r.instrument]}
-              {/* The item-9 check is a safety question, not a score: no severity shown. */}
-              {r.instrument === 'PHQ9_ITEM9' ? '' : `: ${humanize(r.severity_code)}`}
-            </Text>
-          </View>
-        ))}
-      </View>
       <ViewResultsButton sessionId={last.session_id} label={ui.home.viewResults} />
       <Button title={ui.home.again} variant="secondary" onPress={onAgain} />
     </>
