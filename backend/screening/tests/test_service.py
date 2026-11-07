@@ -58,15 +58,51 @@ class AdaptiveFlowTests(ServiceTestBase):
         self.assertIsNotNone(s.completed_at)
         self.assertEqual(sorted(a.instrument.code for a in s.assessments.all()), ['GAD7', 'PHQ9_ITEM9', 'WHO5'])
 
-    def test_poor_wellbeing_adds_phq9(self):
+    def test_poor_wellbeing_offers_phq9_and_waits_for_the_choice(self):
         s = self.start().session
         services.submit_instrument(s, 'WHO5', WHO5_POOR)
         step = services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
-        self.assertEqual(step.next_instrument, 'PHQ9')
+        self.assertIsNone(step.next_instrument)
+        self.assertTrue(step.choice_pending)
         self.assertFalse(step.completed)
+        s.refresh_from_db()
+        self.assertIsNone(s.completed_at)
+        self.assertIsNone(s.phq9_accepted)
+
+    def test_accepting_the_choice_then_phq9_completes(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        choice = services.answer_phq9_choice(s, True)
+        self.assertEqual(choice.next_instrument, 'PHQ9')
+        self.assertFalse(choice.completed)
         step = services.submit_instrument(s, 'PHQ9', PHQ9_MINIMAL)
         self.assertTrue(step.completed)
+        self.assertFalse(step.choice_pending)
         self.assertEqual(s.assessments.count(), 3)
+
+    def test_declining_completes_with_only_wellbeing_and_anxiety(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        choice = services.answer_phq9_choice(s, False)
+        self.assertTrue(choice.completed)
+        self.assertIsNone(choice.next_instrument)
+        s.refresh_from_db()
+        self.assertIsNotNone(s.completed_at)
+        self.assertIs(s.phq9_accepted, False)
+        self.assertEqual(sorted(a.instrument.code for a in s.assessments.all()), ['GAD7', 'WHO5'])
+        self.user.profile.refresh_from_db()
+        self.assertIsNotNone(self.user.profile.onboarding_completed_at)
+
+    def test_declined_very_low_wellbeing_is_still_flagged_from_who5_alone(self):
+        # Declining the PHQ-9 means item 9 is never asked; the WHO-5 flag is the only safety net.
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_VERY_LOW)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.answer_phq9_choice(s, False)
+        self.assertEqual(set(RiskFlag.objects.values_list('source', flat=True)), {'WHO5_LOW'})
+        self.assertEqual(Escalation.objects.count(), 1)
 
     def test_out_of_order_rejected(self):
         s = self.start().session
@@ -81,12 +117,64 @@ class AdaptiveFlowTests(ServiceTestBase):
         with self.assertRaises(services.FlowError):
             services.submit_instrument(s, 'PHQ9', PHQ9_MINIMAL)
 
-    def test_item9_check_rejected_when_full_phq9_is_due(self):
+    def test_item9_check_is_never_asked_to_not_good_wellbeing(self):
         s = self.start().session
         services.submit_instrument(s, 'WHO5', WHO5_POOR)
         services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
         with self.assertRaises(services.FlowError):
             services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
+        services.answer_phq9_choice(s, False)
+        s.refresh_from_db()
+        with self.assertRaises(services.FlowError):
+            services.submit_instrument(s, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
+
+    def test_phq9_rejected_until_the_choice_is_made(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        with self.assertRaises(services.FlowError) as ctx:
+            services.submit_instrument(s, 'PHQ9', PHQ9_MINIMAL)
+        self.assertEqual(ctx.exception.code, 'choice_required')
+        self.assertEqual(Assessment.objects.filter(instrument__code='PHQ9').count(), 0)
+
+    def test_phq9_rejected_after_declining(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.answer_phq9_choice(s, False)
+        s.refresh_from_db()
+        with self.assertRaises(services.FlowError) as ctx:
+            services.submit_instrument(s, 'PHQ9', PHQ9_MINIMAL)
+        self.assertEqual(ctx.exception.code, 'session_complete')
+
+    def test_choice_not_available_before_gad7_or_for_good_wellbeing(self):
+        s = self.start().session
+        with self.assertRaises(services.FlowError) as ctx:
+            services.answer_phq9_choice(s, True)
+        self.assertEqual(ctx.exception.code, 'no_choice_pending')
+        services.submit_instrument(s, 'WHO5', WHO5_GOOD)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        with self.assertRaises(services.FlowError) as ctx:
+            services.answer_phq9_choice(s, True)
+        self.assertEqual(ctx.exception.code, 'no_choice_pending')
+
+    def test_choice_cannot_be_changed_once_made(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.answer_phq9_choice(s, True)
+        with self.assertRaises(services.FlowError) as ctx:
+            services.answer_phq9_choice(s, False)
+        self.assertEqual(ctx.exception.code, 'no_choice_pending')
+
+    def test_choice_after_completion_is_session_complete(self):
+        s = self.start().session
+        services.submit_instrument(s, 'WHO5', WHO5_POOR)
+        services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.answer_phq9_choice(s, False)
+        with self.assertRaises(services.FlowError) as ctx:
+            services.answer_phq9_choice(s, True)
+        self.assertEqual(ctx.exception.code, 'session_complete')
 
     def test_cannot_submit_after_completion(self):
         s = self.start().session
@@ -136,6 +224,7 @@ class CrisisRuleTests(ServiceTestBase):
     def finish_to_phq9(self, s):
         services.submit_instrument(s, 'WHO5', WHO5_POOR)
         services.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        services.answer_phq9_choice(s, True)
 
     def test_item9_alone_raises_crisis_flag_and_escalation(self):
         s = self.start().session

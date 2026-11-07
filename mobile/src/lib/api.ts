@@ -78,3 +78,9 @@ export function apiPost<T>(path: string, data: unknown, token?: string): Promise
     body: JSON.stringify(data),
   });
 }
+
+export const jsonInit = (method: string, data: unknown): RequestInit => ({
+  method,
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(data),
+});

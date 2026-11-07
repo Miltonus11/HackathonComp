@@ -1,7 +1,8 @@
 import { CONSENT_TYPES, type ConsentRecord, type ConsentType } from '@/domain/consent';
 import { normalizePhMobile } from '@/domain/mobile-number';
 import type { LanguageCode, Sector, SessionIdentity, Sex, UserProfile } from '@/domain/profile';
-import { ApiError, apiFetch } from '@/lib/api';
+import { ApiError, apiFetch, jsonInit } from '@/lib/api';
+import { createAuthedClient, type AuthedClient, type Tokens } from '@/lib/authed-client';
 import { NOTICE_VERSION } from '@/content/privacy-notice';
 
 import {
@@ -20,9 +21,6 @@ import { defaultKv, type KeyValueStore } from './storage';
  * Registration is several calls (account, profile, consents). If it stops part-way, calling
  * register again with the same number AND password finishes the setup instead of failing.
  */
-const TOKENS_KEY = 'api_tokens';
-
-type Tokens = { access: string; refresh: string };
 type ApiUser = {
   user_id: string;
   mobile_number: string;
@@ -58,12 +56,6 @@ const FIELD_MAP: Record<string, string> = {
   barangay: 'barangay_id',
 };
 
-const jsonInit = (method: string, data: unknown): RequestInit => ({
-  method,
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify(data),
-});
-
 function toAuthError(e: unknown): AuthError {
   if (e instanceof AuthError) return e;
   if (e instanceof TypeError) {
@@ -86,38 +78,14 @@ function toAuthError(e: unknown): AuthError {
   return new AuthError('SERVER', 'Something went wrong on our side. Please try again.');
 }
 
-export function createApiAuthService(kv: KeyValueStore = defaultKv): AuthService {
+export function createApiAuthService(
+  kv: KeyValueStore = defaultKv,
+  client: AuthedClient = createAuthedClient(kv),
+): AuthService {
   // Details of consent changes made on this device (the API only returns current state).
   const known = new Map<ConsentType, ConsentRow>();
 
-  async function readTokens(): Promise<Tokens | null> {
-    const raw = await kv.get(TOKENS_KEY);
-    return raw ? (JSON.parse(raw) as Tokens) : null;
-  }
-  const saveTokens = (t: Tokens) => kv.set(TOKENS_KEY, JSON.stringify(t));
-
-  /** Authenticated request; refreshes the access token once on 401. */
-  async function authed<T>(path: string, init: RequestInit = {}): Promise<T> {
-    let tokens = await readTokens();
-    if (!tokens) throw new AuthError('NOT_SIGNED_IN', 'You are not signed in.');
-    const call = (access: string) =>
-      apiFetch<T>(path, {
-        ...init,
-        headers: { ...(init.headers as Record<string, string> | undefined), Authorization: `Bearer ${access}` },
-      });
-    try {
-      return await call(tokens.access);
-    } catch (e) {
-      if (!(e instanceof ApiError) || e.status !== 401) throw e;
-      const res = await apiFetch<{ access: string; refresh?: string }>(
-        '/auth/refresh/',
-        jsonInit('POST', { refresh: tokens.refresh }),
-      );
-      tokens = { access: res.access, refresh: res.refresh ?? tokens.refresh };
-      await saveTokens(tokens);
-      return call(tokens.access);
-    }
-  }
+  const { readTokens, saveTokens, authed } = client;
 
   async function login(mobile: string, password: string): Promise<Tokens> {
     const canonical = normalizePhMobile(mobile);
@@ -230,7 +198,7 @@ export function createApiAuthService(kv: KeyValueStore = defaultKv): AuthService
           );
           const state = await authed<ConsentState>('/consents/');
           if (profileExists && state.APP_USE) {
-            await kv.remove(TOKENS_KEY);
+            await client.clearTokens();
             throw err;
           }
         }
@@ -249,7 +217,7 @@ export function createApiAuthService(kv: KeyValueStore = defaultKv): AuthService
         }
         return await buildSession();
       } catch (e) {
-        await kv.remove(TOKENS_KEY);
+        await client.clearTokens();
         const err = toAuthError(e);
         // Stopped by a server/network problem after the account existed: say how to finish.
         // (A 400 stays a field error so the user can correct it and register again.)
@@ -268,7 +236,7 @@ export function createApiAuthService(kv: KeyValueStore = defaultKv): AuthService
         await saveTokens(await login(mobile, password));
         return await buildSession();
       } catch (e) {
-        await kv.remove(TOKENS_KEY);
+        await client.clearTokens();
         if (e instanceof ApiError && e.status === 404) {
           throw new AuthError(
             'SETUP_INCOMPLETE',
@@ -286,13 +254,13 @@ export function createApiAuthService(kv: KeyValueStore = defaultKv): AuthService
       } catch (e) {
         // Offline at launch: keep the tokens so the next launch can restore. Anything else
         // (expired refresh, missing profile) means the stored session is no longer usable.
-        if (!(e instanceof TypeError)) await kv.remove(TOKENS_KEY);
+        if (!(e instanceof TypeError)) await client.clearTokens();
         return null;
       }
     },
 
     async signOut() {
-      await kv.remove(TOKENS_KEY);
+      await client.clearTokens();
       known.clear();
     },
 

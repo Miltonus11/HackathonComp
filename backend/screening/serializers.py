@@ -8,6 +8,10 @@ class ResponseItemSerializer(serializers.Serializer):
     value = serializers.IntegerField()
 
 
+class ChoiceSerializer(serializers.Serializer):
+    accept = serializers.BooleanField()
+
+
 class AnswerSerializer(serializers.Serializer):
     instrument = serializers.ChoiceField(choices=INSTRUMENT_CODES)
     responses = ResponseItemSerializer(many=True, allow_empty=False)

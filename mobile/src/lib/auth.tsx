@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { hasRequiredConsent as ledgerHasRequired, type ConsentType } from '@/domain/consent';
 import type { LanguageCode } from '@/domain/profile';
 import type { RegistrationInput, Session } from '@/services/auth-service';
+import { resetAssessmentPrompt } from './assessment-prompt';
 import { createApiAuthService } from '@/services/api-auth-service';
 import { USE_MOCK } from '@/services/config';
 import { createMockAuthService } from '@/services/mock-auth-service';
@@ -20,6 +21,8 @@ type AuthContextValue = {
   signUp: (input: RegistrationInput) => Promise<void>;
   signOut: () => Promise<void>;
   setConsent: (type: ConsentType, granted: boolean, language: LanguageCode) => Promise<void>;
+  /** Re-reads the account from the server (e.g. onboarding_completed_at after the assessment). */
+  refreshSession: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -37,15 +40,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = useCallback(async (mobile: string, password: string) => {
+    resetAssessmentPrompt();
     setSession(await authService.signIn(mobile, password));
   }, []);
 
   const signUp = useCallback(async (input: RegistrationInput) => {
+    resetAssessmentPrompt();
     setSession(await authService.register(input));
   }, []);
 
   const signOut = useCallback(async () => {
     await authService.signOut();
+    resetAssessmentPrompt();
     setSession(null);
   }, []);
 
@@ -56,11 +62,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [],
   );
 
+  const refreshSession = useCallback(async () => {
+    const fresh = await authService.restore();
+    if (fresh) setSession(fresh);
+  }, []);
+
   const hasRequiredConsent = !!session && ledgerHasRequired(session.consents, session.identity.user_id);
 
   const value = useMemo(
-    () => ({ session, loading, hasRequiredConsent, signIn, signUp, signOut, setConsent }),
-    [session, loading, hasRequiredConsent, signIn, signUp, signOut, setConsent],
+    () => ({ session, loading, hasRequiredConsent, signIn, signUp, signOut, setConsent, refreshSession }),
+    [session, loading, hasRequiredConsent, signIn, signUp, signOut, setConsent, refreshSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -3,9 +3,9 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import presenters, services
+from . import flow, presenters, services
 from .models import AssessmentSession
-from .serializers import AnswerSerializer
+from .serializers import AnswerSerializer, ChoiceSerializer
 
 _STATUS = {
     'consent_required': status.HTTP_403_FORBIDDEN,
@@ -63,5 +63,28 @@ class SessionAnswersView(APIView):
             'crisis': services.crisis_payload(request.user) if step.crisis else None,
             'result': presenters.result(request.user, step.assessment),
             'next': presenters.next_form(request.user, step.next_instrument),
+            'choice': flow.CHOICE_MOOD_QUESTIONS if step.choice_pending else None,
+            'completed': step.completed,
+        })
+
+
+class SessionChoiceView(APIView):
+    """A not-good-WHO-5 person says whether they want the full PHQ-9 ("more questions about mood").
+
+    Accept: the PHQ-9 form comes back as 'next'. Decline: the session is completed with just the
+    WHO-5 and GAD-7 results.
+    """
+
+    def post(self, request, session_id):
+        session = _own_session(request, session_id)
+        serializer = ChoiceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            step = services.answer_phq9_choice(session, serializer.validated_data['accept'])
+        except services.FlowError as exc:
+            return _flow_error(exc)
+        return Response({
+            'next': presenters.next_form(request.user, step.next_instrument),
+            'choice': None,
             'completed': step.completed,
         })

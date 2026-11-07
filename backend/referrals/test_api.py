@@ -33,6 +33,7 @@ def complete_session(user, path):
     else:
         screening.submit_instrument(s, 'WHO5', WHO5_POOR)
         screening.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+        screening.answer_phq9_choice(s, True)
         screening.submit_instrument(s, 'PHQ9', PHQ9_MODERATE if path == 'MODERATE' else PHQ9_SEVERE)
     s.refresh_from_db()
     return s
