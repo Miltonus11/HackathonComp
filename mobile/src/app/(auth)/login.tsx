@@ -67,7 +67,7 @@ export default function Login() {
         onSubmitEditing={submit}
         editable={!submitting}
       />
-      <Text className="text-sm text-muted-foreground">Forgot password? Coming soon.</Text>
+      <Text className="text-sm text-muted-foreground">Forgot password?.</Text>
     </Screen>
   );
 }

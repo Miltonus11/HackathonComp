@@ -9,9 +9,9 @@ type Props = {
 };
 
 const STYLES = {
-  primary: { box: 'bg-primary', text: 'text-primary-foreground', spinner: '#f5f3ff' },
-  secondary: { box: 'bg-secondary', text: 'text-secondary-foreground', spinner: '#18181b' },
-  ghost: { box: 'bg-transparent', text: 'text-primary', spinner: '#7008e7' },
+  primary: { box: 'bg-primary', text: 'text-primary-foreground', spinner: '#fbf9f5' },
+  secondary: { box: 'bg-secondary', text: 'text-secondary-foreground', spinner: '#4a3f6b' },
+  ghost: { box: 'bg-transparent', text: 'text-primary', spinner: '#6d6193' },
 } as const;
 
 export function Button({ title, onPress, variant = 'primary', loading, disabled }: Props) {
@@ -21,14 +21,25 @@ export function Button({ title, onPress, variant = 'primary', loading, disabled 
     <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: !!inactive, busy: !!loading }}
-      className={`min-h-12 items-center justify-center rounded-xl px-5 py-3 active:opacity-80 ${s.box}`}
-      style={inactive ? { opacity: 0.5 } : undefined}
+      className={`min-h-14 items-center justify-center rounded-full px-6 py-3.5 active:scale-[0.98] active:opacity-85 ${s.box}`}
+      style={[
+        variant === 'primary'
+          ? {
+              shadowColor: '#6d6193',
+              shadowOpacity: 0.28,
+              shadowRadius: 12,
+              shadowOffset: { width: 0, height: 6 },
+              elevation: 4,
+            }
+          : null,
+        inactive ? { opacity: 0.5 } : null,
+      ]}
       disabled={inactive}
       onPress={onPress}>
       {loading ? (
         <ActivityIndicator color={s.spinner} />
       ) : (
-        <Text className={`text-base font-semibold ${s.text}`}>{title}</Text>
+        <Text className={`text-base font-semibold tracking-wide ${s.text}`}>{title}</Text>
       )}
     </Pressable>
   );

@@ -72,9 +72,9 @@ function MoodDialogBody({ lang, onSubmit }: Omit<Props, 'visible'>) {
                 setScore(clampMood(v));
                 setTouched(true);
               }}
-              minimumTrackTintColor="#7008e7"
+              minimumTrackTintColor="#6d6193"
               maximumTrackTintColor="#e5e5e5"
-              thumbTintColor="#7008e7"
+              thumbTintColor="#6d6193"
               style={{ height: 44 }}
             />
             <View className="flex-row items-center justify-between px-1">

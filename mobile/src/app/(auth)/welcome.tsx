@@ -1,6 +1,7 @@
 import { Redirect, useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
+import { APP_NAME, Logo } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { LanguageToggle } from '@/components/ui/language-toggle';
 import { Screen } from '@/components/ui/screen';
@@ -9,12 +10,14 @@ import { useOnboardingDraft } from '@/lib/onboarding-draft';
 
 const COPY = {
   en: {
+    hello: 'Welcome. Take a breath, you are in a safe place.',
     tagline: 'A private space to check in on how you are feeling and find support in San Fernando.',
     note: 'This app offers screening and guidance. It does not diagnose and is not a replacement for a professional.',
     start: 'Get started',
     login: 'I already have an account',
   },
   fil: {
+    hello: 'Maligayang pagdating. Huminga ka muna, ligtas ka rito.',
     tagline: 'Pribadong lugar para suriin ang iyong nararamdaman at humanap ng suporta sa San Fernando.',
     note: 'Nag-aalok ang app na ito ng screening at gabay. Hindi ito nagdidiyagnos at hindi pamalit sa propesyonal.',
     start: 'Magsimula',
@@ -39,16 +42,21 @@ export default function Welcome() {
           <Button title={copy.login} variant="ghost" onPress={() => router.push('/login')} />
         </>
       }>
-      <View className="gap-6 pt-8">
+      <View className="items-end">
         <LanguageToggle value={language} onChange={setLanguage} />
-        <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-          <Text className="text-3xl font-bold text-primary-foreground">♥</Text>
+      </View>
+      <View className="items-center gap-5 pt-6">
+        <Logo height={150} />
+        <View className="items-center gap-2">
+          <Text className="text-4xl font-bold tracking-tight text-primary" accessibilityRole="header">
+            {APP_NAME}
+          </Text>
+          <Text className="text-center text-lg font-medium text-foreground">{copy.hello}</Text>
         </View>
-        <View className="gap-3">
-          <Text className="text-3xl font-bold text-foreground">San Fernando Mind Care</Text>
-          <Text className="text-base text-foreground">{copy.tagline}</Text>
-          <Text className="text-sm text-muted-foreground">{copy.note}</Text>
-        </View>
+      </View>
+      <View className="gap-3 rounded-3xl bg-card/80 p-5">
+        <Text className="text-center text-base leading-6 text-foreground">{copy.tagline}</Text>
+        <Text className="text-center text-sm leading-5 text-muted-foreground">{copy.note}</Text>
       </View>
     </Screen>
   );

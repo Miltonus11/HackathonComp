@@ -14,6 +14,8 @@ type MoodContextValue = {
   logged: boolean | null;
   /** Today's saved entry, once known. Later features (journal prompts) can read it. */
   entry: MoodEntry | null;
+  /** Today's date ('YYYY-MM-DD', Philippine time) as the server sees it; null until it answers. */
+  date: string | null;
   refresh: () => Promise<void>;
   /** Throws a MoodError on failure so the dialog can keep the person's answer. */
   submit: (score: number, reason: MoodReason | null) => Promise<void>;
@@ -41,6 +43,7 @@ function MoodInner({ signedIn, children }: { signedIn: boolean; children: React.
   const [status, setStatus] = useState<Status>(signedIn ? 'loading' : 'idle');
   const [logged, setLogged] = useState<boolean | null>(null);
   const [entry, setEntry] = useState<MoodEntry | null>(null);
+  const [date, setDate] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!signedIn) return;
@@ -48,6 +51,7 @@ function MoodInner({ signedIn, children }: { signedIn: boolean; children: React.
       const t = await moodService.today();
       setLogged(t.logged);
       setEntry(t.entry);
+      setDate(t.date);
       setStatus('ready');
     } catch {
       setStatus((s) => (s === 'ready' ? s : 'error')); // keep the last good answer if re-checking fails
@@ -57,6 +61,7 @@ function MoodInner({ signedIn, children }: { signedIn: boolean; children: React.
   const submit = useCallback(async (score: number, reason: MoodReason | null) => {
     const saved = await moodService.log(score, reason);
     setEntry(saved);
+    setDate(saved.entry_date);
     setLogged(true);
     setStatus('ready');
   }, []);
@@ -71,6 +76,7 @@ function MoodInner({ signedIn, children }: { signedIn: boolean; children: React.
         if (cancelled) return;
         setLogged(t.logged);
         setEntry(t.entry);
+        setDate(t.date);
         setStatus('ready');
       })
       .catch(() => {
@@ -89,8 +95,8 @@ function MoodInner({ signedIn, children }: { signedIn: boolean; children: React.
   }, [refresh]);
 
   const value = useMemo(
-    () => ({ status, logged, entry, refresh, submit }),
-    [status, logged, entry, refresh, submit],
+    () => ({ status, logged, entry, date, refresh, submit }),
+    [status, logged, entry, date, refresh, submit],
   );
   return <MoodContext.Provider value={value}>{children}</MoodContext.Provider>;
 }

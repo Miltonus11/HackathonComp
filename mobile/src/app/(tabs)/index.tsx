@@ -1,7 +1,9 @@
 import { useRouter } from 'expo-router';
 import { Text, View } from 'react-native';
 
+import { BrandLockup } from '@/components/brand';
 import { MoodGate } from '@/components/mood-gate';
+import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Screen } from '@/components/ui/screen';
 import type { SessionSummary } from '@/domain/screening';
@@ -23,18 +25,28 @@ export default function Home() {
   };
 
   return (
-    <Screen footer={<Button title="Log out" variant="secondary" onPress={handleSignOut} />}>
+    <Screen footer={<Button title="Log out" variant="ghost" onPress={handleSignOut} />}>
       {/* Returning users: the daily mood dialog shows here once a day. First-timers meet it in Journal. */}
       <MoodGate where="home" />
-      <View className="gap-2 pt-6">
-        <Text className="text-3xl font-bold text-foreground">Hello, {name}</Text>
-        <Text className="text-base text-muted-foreground">
-          Your account is ready. Mood check-ins and the journal are coming next.
+      <BrandLockup />
+      <View className="gap-2 pt-4">
+        <Text className="text-base font-medium text-primary">{greeting()}</Text>
+        <Text className="text-4xl font-bold tracking-tight text-foreground">{name}</Text>
+        <Text className="text-base leading-6 text-muted-foreground">
+          Be gentle with yourself today. Whenever you are ready, the Journal tab is a quiet place to
+          put your thoughts down.
         </Text>
       </View>
       {USE_MOCK ? null : <AssessmentCard />}
     </Screen>
   );
+}
+
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning,';
+  if (h < 18) return 'Good afternoon,';
+  return 'Good evening,';
 }
 
 function AssessmentCard() {
@@ -44,8 +56,8 @@ function AssessmentCard() {
   const open = () => router.push('/assessment');
 
   return (
-    <View className="gap-3 rounded-2xl border border-border bg-card p-5">
-      <Text className="text-lg font-semibold text-foreground">{ui.home.title}</Text>
+    <Card>
+      <Text className="text-xl font-semibold text-foreground">{ui.home.title}</Text>
 
       {state.phase === 'loading' ? <Text className="text-base text-muted-foreground">{ui.home.loading}</Text> : null}
 
@@ -73,7 +85,7 @@ function AssessmentCard() {
       {state.phase === 'ready' && state.status.kind === 'done' ? (
         <DoneSummary last={state.status.last} onAgain={open} />
       ) : null}
-    </View>
+    </Card>
   );
 }
 

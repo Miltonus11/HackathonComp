@@ -62,7 +62,7 @@ function ResultCard({ result }: { result: Result }) {
   const message = gentleAdvice(result.advice, lang);
 
   return (
-    <View className="gap-2 rounded-2xl border border-border bg-card p-5">
+    <View className="gap-2 rounded-3xl border border-border bg-card p-5">
       <Text className="text-sm font-semibold uppercase text-muted-foreground">
         {ui.instrumentTitle[result.instrument]}
       </Text>

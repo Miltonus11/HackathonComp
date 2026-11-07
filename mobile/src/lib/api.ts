@@ -39,12 +39,17 @@ function errorMessage(body: unknown, fallback: string): string {
   return parts.join('\n') || fallback;
 }
 
-const REQUEST_TIMEOUT_MS = 10_000;
+export const REQUEST_TIMEOUT_MS = 10_000;
 
-export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+export type RequestOptions = {
+  /** Give up after this long. Defaults to REQUEST_TIMEOUT_MS. */
+  timeoutMs?: number;
+};
+
+export async function apiFetch<T>(path: string, init?: RequestInit, opts: RequestOptions = {}): Promise<T> {
   // fetch has no default timeout, so an unreachable address would hang forever.
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let res: Response;
   try {
     res = await fetch(`${API_URL}${path}`, { ...init, signal: controller.signal });
@@ -65,6 +70,8 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       fieldErrors(body),
     );
   }
+  // 204 No Content (e.g. DELETE) has no body to parse.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

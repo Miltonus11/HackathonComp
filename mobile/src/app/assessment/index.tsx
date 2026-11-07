@@ -41,7 +41,7 @@ export default function AssessmentIntro() {
         </>
       }>
       <View className="gap-4 pt-6">
-        <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary">
+        <View className="h-16 w-16 items-center justify-center rounded-3xl bg-primary">
           <Text className="text-3xl text-primary-foreground">✓</Text>
         </View>
         <Text className="text-3xl font-bold text-foreground">{ui.intro.title}</Text>

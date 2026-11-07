@@ -14,15 +14,15 @@ export function TextField({ label, error, hint, required, secure, ...input }: Pr
   const [show, setShow] = useState(false);
   return (
     <View className="gap-1.5">
-      <Text className="text-sm font-medium text-foreground">
+      <Text className="ml-1 text-sm font-semibold text-secondary-foreground">
         {label}
         {required ? <Text className="text-destructive"> *</Text> : null}
       </Text>
       <View className="justify-center">
         <TextInput
           accessibilityLabel={label}
-          placeholderTextColor="#737373"
-          className={`min-h-12 rounded-xl border bg-card px-4 py-3 text-base text-foreground ${
+          placeholderTextColor="#9a93a8"
+          className={`min-h-14 rounded-2xl border bg-card px-5 py-3.5 text-base text-foreground ${
             error ? 'border-destructive' : 'border-input'
           } ${secure ? 'pr-16' : ''}`}
           autoCapitalize="none"

@@ -37,7 +37,7 @@ export function MoodGate({ where }: { where: MoodGateWhere }) {
   return (
     <>
       {status === 'error' && logged === null ? (
-        <View className="gap-3 rounded-2xl border border-border bg-card p-5">
+        <View className="gap-3 rounded-3xl border border-border bg-card p-5">
           <Text className="text-base text-foreground">{ui.loadError}</Text>
           <Button title={ui.loadRetry} variant="secondary" onPress={refresh} />
         </View>
