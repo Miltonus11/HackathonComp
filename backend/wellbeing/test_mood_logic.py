@@ -40,3 +40,18 @@ class BaselineTests(SimpleTestCase):
     def test_minimum_is_three_entries(self):
         self.assertEqual(trends.MIN_ENTRIES_FOR_BASELINE, 3)
         self.assertIsNotNone(trends.baseline([1, 1, 1]))
+
+
+class TrendLabelTests(SimpleTestCase):
+    def test_none_without_a_baseline(self):
+        self.assertIsNone(trends.trend_label(5, None))
+
+    def test_labels(self):
+        self.assertEqual(trends.trend_label(4, 6.5), 'LOWER_THAN_USUAL')
+        self.assertEqual(trends.trend_label(8, 6.0), 'HIGHER_THAN_USUAL')
+        self.assertEqual(trends.trend_label(6, 6.5), 'ABOUT_USUAL')
+        self.assertEqual(trends.trend_label(5, 6.5), 'ABOUT_USUAL')   # a gap under 2 is normal variation
+
+    def test_boundaries_are_inclusive_at_two_points(self):
+        self.assertEqual(trends.trend_label(4, 6.0), 'LOWER_THAN_USUAL')
+        self.assertEqual(trends.trend_label(8, 6.0), 'HIGHER_THAN_USUAL')

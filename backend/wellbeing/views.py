@@ -1,17 +1,25 @@
 from datetime import timedelta
 
 from django.db import IntegrityError, transaction
+from django.shortcuts import get_object_or_404
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from . import trends
+from safety.models import AuditLog
+
+from . import journal, trends
 from .clock import today_ph
-from .models import MoodEntry
+from .models import JournalEntry, JournalPrompt, MoodEntry
 
 MAX_HISTORY_DAYS = 365
 DEFAULT_HISTORY_DAYS = 30
+MAX_JOURNAL_CHARS = 5000
+DEFAULT_JOURNAL_LIMIT = 50
+MAX_JOURNAL_LIMIT = 200
 
+
+# ----------------------------------------------------------------------------------------------- mood
 
 class MoodLogSerializer(serializers.Serializer):
     mood_score = serializers.IntegerField(min_value=1, max_value=10)
@@ -71,3 +79,84 @@ class MoodView(APIView):
                          'reason_code': e.reason_code} for e in entries],
             'baseline': trends.baseline(recent.values_list('mood_score', flat=True)),
         })
+
+
+# -------------------------------------------------------------------------------------------- journal
+
+class StrictCharField(serializers.CharField):
+    """CharField would quietly turn 123 into '123'; journal text must really be text."""
+
+    def to_internal_value(self, data):
+        if not isinstance(data, str):
+            self.fail('invalid')
+        return super().to_internal_value(data)
+
+
+class JournalWriteSerializer(serializers.Serializer):
+    body = StrictCharField(max_length=MAX_JOURNAL_CHARS)
+    prompt_id = serializers.IntegerField(required=False, allow_null=True)
+
+    def validate_prompt_id(self, value):
+        if value is None:
+            return None
+        prompt = JournalPrompt.objects.filter(
+            pk=value, review_status=JournalPrompt.ReviewStatus.PUBLISHED, is_active=True).first()
+        if prompt is None:
+            raise serializers.ValidationError('Unknown prompt.')
+        return prompt
+
+
+def _journal_entry(e):
+    return {
+        'entry_id': str(e.id),
+        'written_at': e.written_at,
+        'prompt_text': e.prompt.prompt_text if e.prompt_id else None,
+        'body': e.get_text(),
+        'reflection': e.get_reflection(),
+    }
+
+
+class JournalPromptView(APIView):
+    def get(self, request):
+        return Response(journal.current_prompt(request.user))
+
+
+class JournalListCreateView(APIView):
+    def post(self, request):
+        serializer = JournalWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        body = serializer.validated_data['body']
+        saved = journal.save_entry(request.user, body, prompt=serializer.validated_data.get('prompt_id'))
+        saved = journal.complete_with_ai(request.user, saved, body)  # after the save has committed
+        return Response({
+            'entry_id': str(saved.entry.id),
+            'written_at': saved.entry.written_at,
+            'reflection': saved.reflection,
+            'ai_status': saved.ai_status,
+            'crisis': saved.crisis,
+        }, status=status.HTTP_201_CREATED)
+
+    def get(self, request):
+        raw = request.query_params.get('limit', str(DEFAULT_JOURNAL_LIMIT))
+        if not raw.isdigit() or not 1 <= int(raw) <= MAX_JOURNAL_LIMIT:
+            return Response({'detail': f'limit must be a whole number from 1 to {MAX_JOURNAL_LIMIT}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        entries = JournalEntry.objects.filter(user=request.user).select_related('prompt')[:int(raw)]
+        return Response([_journal_entry(e) for e in entries])
+
+
+class JournalDetailView(APIView):
+    def _entry(self, request, entry_id):
+        return get_object_or_404(JournalEntry.objects.select_related('prompt'), pk=entry_id, user=request.user)
+
+    def get(self, request, entry_id):
+        return Response(_journal_entry(self._entry(request, entry_id)))
+
+    def delete(self, request, entry_id):
+        entry = self._entry(request, entry_id)
+        with transaction.atomic():
+            AuditLog.objects.create(
+                actor_type=AuditLog.ActorType.USER, actor_id=request.user.user_id, action='DELETE_JOURNAL',
+                target_type='journal_entry', target_id=entry.id, result=AuditLog.Result.ALLOWED)
+            entry.delete()  # hard delete: no recovery
+        return Response(status=status.HTTP_204_NO_CONTENT)

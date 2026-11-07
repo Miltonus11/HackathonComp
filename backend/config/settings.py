@@ -158,6 +158,17 @@ AUTH_USER_MODEL = 'accounts.User'
 # Change the model with OPENAI_MODEL in .env.
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
+# Master switch for every AI feature. OFF unless AI_FEATURES_ENABLED=True in .env (flip it for demos only
+# after the DPO has accepted sending de-identified text to OpenAI).
+AI_FEATURES_ENABLED = config('AI_FEATURES_ENABLED', default=False, cast=bool)
+# Hard time limits in seconds. On timeout the app falls back (reviewed prompt / no reflection).
+AI_PROMPT_TIMEOUT = config('AI_PROMPT_TIMEOUT', default=4, cast=float)
+AI_RISK_TIMEOUT = config('AI_RISK_TIMEOUT', default=5, cast=float)
+AI_REFLECTION_TIMEOUT = config('AI_REFLECTION_TIMEOUT', default=10, cast=float)
+
+# Master key for per-user journal encryption. Falls back to SECRET_KEY if unset (local dev only).
+# In production set a dedicated key and NEVER change it, or existing entries become unreadable.
+JOURNAL_ENCRYPTION_KEY = config('JOURNAL_ENCRYPTION_KEY', default='')
 
 # Shown on the crisis screen. [VERIFY] every number with the City Health Office before launch.
 CRISIS_HOTLINES = [
