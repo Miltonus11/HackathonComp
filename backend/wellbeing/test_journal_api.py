@@ -35,6 +35,7 @@ def take_phq9(user, answers):
     s = screening.start_session(user).session
     screening.submit_instrument(s, 'WHO5', WHO5_POOR)
     screening.submit_instrument(s, 'GAD7', GAD7_MINIMAL)
+    screening.answer_phq9_choice(s, True)  # a not-good WHO-5 person chooses to take the longer questions
     screening.submit_instrument(s, 'PHQ9', {**uniform(9, 0), **answers})
     return s
 

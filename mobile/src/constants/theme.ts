@@ -10,15 +10,15 @@ import { Platform } from 'react-native';
 // Values mirror the CSS variables in src/global.css (shadcn palette, converted from oklch).
 export const Colors = {
   light: {
-    text: '#0a0a0a',
-    background: '#ffffff',
-    backgroundElement: '#f5f5f5',
-    backgroundSelected: '#e5e5e5',
-    textSecondary: '#737373',
-    primary: '#7008e7',
-    primaryForeground: '#f5f3ff',
-    destructive: '#e7000b',
-    border: '#e5e5e5',
+    text: '#2f2a3d',
+    background: '#f4f1ea',
+    backgroundElement: '#e8e3f0',
+    backgroundSelected: '#ece8df',
+    textSecondary: '#766f86',
+    primary: '#6d6193',
+    primaryForeground: '#fbf9f5',
+    destructive: '#b4544f',
+    border: '#e3ddd2',
   },
   dark: {
     text: '#fafafa',

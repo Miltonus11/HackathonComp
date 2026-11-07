@@ -47,7 +47,7 @@ export function SelectField<T extends string | number>({
       {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
 
       <Modal visible={open} animationType="slide" onRequestClose={() => setOpen(false)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: '#ffffff' }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#f4f1ea' }}>
           <View className="flex-row items-center justify-between border-b border-border px-6 py-4">
             <Text className="text-lg font-semibold text-foreground">{label}</Text>
             <Pressable hitSlop={10} onPress={() => setOpen(false)}>

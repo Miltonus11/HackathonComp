@@ -1,6 +1,6 @@
 import type { KeyValueStore } from '@/services/storage';
 
-import { ApiError, apiFetch, jsonInit } from './api';
+import { ApiError, apiFetch, jsonInit, type RequestOptions } from './api';
 
 export const TOKENS_KEY = 'api_tokens';
 
@@ -11,7 +11,7 @@ export type AuthedClient = {
   saveTokens(tokens: Tokens): Promise<void>;
   clearTokens(): Promise<void>;
   /** Authenticated request; refreshes the access token once on 401. */
-  authed<T>(path: string, init?: RequestInit): Promise<T>;
+  authed<T>(path: string, init?: RequestInit, opts?: RequestOptions): Promise<T>;
 };
 
 /**
@@ -26,17 +26,22 @@ export function createAuthedClient(kv: KeyValueStore): AuthedClient {
   const saveTokens = (tokens: Tokens) => kv.set(TOKENS_KEY, JSON.stringify(tokens));
   const clearTokens = () => kv.remove(TOKENS_KEY);
 
-  async function authed<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async function authed<T>(path: string, init: RequestInit = {}, opts?: RequestOptions): Promise<T> {
     let tokens = await readTokens();
     if (!tokens) throw new ApiError(401, 'You are not signed in.');
+    // A 401 is decided before the view runs, so retrying after a refresh never repeats a write.
     const call = (access: string) =>
-      apiFetch<T>(path, {
-        ...init,
-        headers: {
-          ...(init.headers as Record<string, string> | undefined),
-          Authorization: `Bearer ${access}`,
+      apiFetch<T>(
+        path,
+        {
+          ...init,
+          headers: {
+            ...(init.headers as Record<string, string> | undefined),
+            Authorization: `Bearer ${access}`,
+          },
         },
-      });
+        opts,
+      );
     try {
       return await call(tokens.access);
     } catch (e) {

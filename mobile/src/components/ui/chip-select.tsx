@@ -19,7 +19,7 @@ export function ChipSelect<T extends string>({
 }: Props<T>) {
   return (
     <View className="gap-1.5">
-      <Text className="text-sm font-medium text-foreground">
+      <Text className="ml-1 text-sm font-semibold text-secondary-foreground">
         {label}
         {required ? <Text className="text-destructive"> *</Text> : null}
       </Text>

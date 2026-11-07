@@ -11,25 +11,25 @@
    * Palette ported from the web shadcn theme ("globals (1).css"). The source uses oklch();
    * values are converted to hex here so they render identically on iOS, Android and web.
    */
-  --background: #ffffff; /* oklch(1 0 0) */
-  --foreground: #0a0a0a; /* oklch(0.145 0 0) */
-  --card: #ffffff;
-  --card-foreground: #0a0a0a;
-  --popover: #ffffff;
-  --popover-foreground: #0a0a0a;
-  --primary: #7008e7; /* oklch(0.491 0.27 292.581) violet */
-  --primary-foreground: #f5f3ff; /* oklch(0.969 0.016 293.756) */
-  --secondary: #f4f4f5; /* oklch(0.967 0.001 286.375) */
-  --secondary-foreground: #18181b; /* oklch(0.21 0.006 285.885) */
-  --muted: #f5f5f5; /* oklch(0.97 0 0) */
-  --muted-foreground: #737373; /* oklch(0.556 0 0) */
-  --accent: #f5f5f5;
-  --accent-foreground: #171717; /* oklch(0.205 0 0) */
-  --destructive: #e7000b; /* oklch(0.577 0.245 27.325) */
-  --border: #e5e5e5; /* oklch(0.922 0 0) */
-  --input: #e5e5e5;
-  --ring: #a1a1a1; /* oklch(0.708 0 0) */
-  --radius: 0.625rem;
+  --background: #f4f1ea; /* warm cream, matches the EunoiApp logo */
+  --foreground: #2f2a3d; /* deep plum ink */
+  --card: #fbf9f5;
+  --card-foreground: #2f2a3d;
+  --popover: #fbf9f5;
+  --popover-foreground: #2f2a3d;
+  --primary: #6d6193; /* logo purple */
+  --primary-foreground: #fbf9f5;
+  --secondary: #e8e3f0; /* soft lavender */
+  --secondary-foreground: #4a3f6b;
+  --muted: #ece8df;
+  --muted-foreground: #766f86;
+  --accent: #e8e3f0;
+  --accent-foreground: #4a3f6b;
+  --destructive: #b4544f;
+  --border: #e3ddd2;
+  --input: #d9d2c6;
+  --ring: #a299b8;
+  --radius: 1rem;
 }
 
 /* Dark values kept for later. The app is pinned to light (app.json userInterfaceStyle). */

@@ -123,7 +123,7 @@ const UI: Record<LanguageCode, AssessmentUi> = {
     },
     instrumentTitle: {
       WHO5: 'Wellbeing',
-      GAD7: 'Anxiety',
+      GAD7: 'Emotion',
       PHQ9: 'Mood',
       PHQ9_ITEM9: 'Safety check',
     },
