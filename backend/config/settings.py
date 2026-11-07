@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'screening',
     'safety',
     'referrals',
+    'wellbeing',
 ]
 
 MIDDLEWARE = [
@@ -152,6 +153,11 @@ REST_FRAMEWORK = {
 }
 
 AUTH_USER_MODEL = 'accounts.User'
+
+# AI (journal prompt wording and reflections). Server-side only; the key never leaves the backend.
+# Change the model with OPENAI_MODEL in .env.
+OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+OPENAI_MODEL = config('OPENAI_MODEL', default='gpt-4o-mini')
 
 # Shown on the crisis screen. [VERIFY] every number with the City Health Office before launch.
 CRISIS_HOTLINES = [
