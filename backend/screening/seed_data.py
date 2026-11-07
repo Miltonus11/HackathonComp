@@ -56,6 +56,16 @@ INSTRUMENTS = {
         ],
         critical_items=[9],
     ),
+    # Asked alone when the full PHQ-9 is skipped. Not a PHQ-9 score: it gives no severity and must
+    # not be counted as a PHQ-9 in analytics.
+    'PHQ9_ITEM9': dict(
+        name='PHQ-9 item 9 safety check', min_response=0, max_response=3,
+        score_direction='HIGHER_WORSE', recall_period_days=14, scoring_version='phq9i9-1.0',
+        source_citation='Item 9 of the PHQ-9 (Kroenke, Spitzer, Williams 2001), asked on its own.',
+        options=FREQ_4,
+        items=['Thoughts that you would be better off dead, or of hurting yourself in some way'],
+        critical_items=[1],
+    ),
 }
 
 # (min, max, severity_code, label, triggers_crisis_flow). PHQ-9/GAD-7 on raw; WHO-5 on scaled (0-100).
@@ -72,6 +82,12 @@ BANDS = {
         (5, 9, 'MILD', 'Mild', False),
         (10, 14, 'MODERATE', 'Moderate', False),
         (15, 21, 'SEVERE', 'Severe', True),
+    ],
+    # No band triggers the crisis flow here: the critical item (> 0) raises the PHQ9_ITEM9 flag, and a
+    # band trigger would raise a second, duplicate flag.
+    'PHQ9_ITEM9': [
+        (0, 0, 'NEGATIVE', 'No signal', False),
+        (1, 3, 'POSITIVE', 'Needs support', False),
     ],
     'WHO5': [  # [VERIFY] thresholds against the official WHO-5 guide
         ('0.0', '28.0', 'LIKELY_DEPRESSION', 'Very low wellbeing', True),
@@ -97,6 +113,12 @@ ADVICE = [
     ('PHQ9', 'SEVERE', 'PRIORITY_REFERRAL', 'Signs of severe low mood',
      'Your responses suggest severe signs of low mood. Please reach out to a health professional or someone '
      'you trust as soon as you can. You do not have to handle this alone.'),
+    ('PHQ9_ITEM9', 'NEGATIVE', 'MONITOR', 'Thank you for answering',
+     'Your answer suggests you have not had thoughts of harming yourself recently. If that ever changes, '
+     'support is always available, and you can reach out at any time.'),
+    ('PHQ9_ITEM9', 'POSITIVE', 'CRISIS_SUPPORT', 'Thank you for telling us',
+     'Your answer suggests you have had thoughts of harming yourself. You deserve support, and you do not '
+     'have to face this alone. Please see the help options shown with this result.'),
     ('GAD7', 'MINIMAL', 'MONITOR', 'Few signs of anxiety',
      'Your responses suggest few or no signs of anxiety right now. Keep doing what helps you feel settled.'),
     ('GAD7', 'MILD', 'SELF_CARE', 'Some signs of anxiety',

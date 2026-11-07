@@ -14,23 +14,24 @@ class SeedScreeningTests(TestCase):
 
     def test_instruments_and_item_counts(self):
         counts = {i.code: i.items.filter(language_code='en').count() for i in Instrument.objects.all()}
-        self.assertEqual(counts, {'WHO5': 5, 'GAD7': 7, 'PHQ9': 9})
+        self.assertEqual(counts, {'WHO5': 5, 'GAD7': 7, 'PHQ9': 9, 'PHQ9_ITEM9': 1})
         for i in Instrument.objects.all():
             self.assertEqual(i.item_count, counts[i.code])
 
     def test_only_phq9_item9_is_critical(self):
         critical = InstrumentItem.objects.filter(is_critical=True)
-        self.assertEqual([(c.instrument.code, c.item_no) for c in critical], [('PHQ9', 9)])
+        self.assertEqual([(c.instrument.code, c.item_no) for c in critical], [('PHQ9', 9), ('PHQ9_ITEM9', 1)])
 
     def test_response_ranges(self):
         r = {i.code: (i.min_response, i.max_response) for i in Instrument.objects.all()}
-        self.assertEqual(r, {'WHO5': (0, 5), 'GAD7': (0, 3), 'PHQ9': (0, 3)})
+        self.assertEqual(r, {'WHO5': (0, 5), 'GAD7': (0, 3), 'PHQ9': (0, 3), 'PHQ9_ITEM9': (0, 3)})
 
     def test_bands_cover_every_possible_score_exactly_once(self):
         possible = {
             'PHQ9': [Decimal(n) for n in range(0, 28)],
             'GAD7': [Decimal(n) for n in range(0, 22)],
             'WHO5': [Decimal(n * 4) for n in range(0, 26)],  # scaled scores are multiples of 4
+            'PHQ9_ITEM9': [Decimal(n) for n in range(0, 4)],
         }
         for code, values in possible.items():
             bands = list(SeverityBand.objects.filter(instrument__code=code))

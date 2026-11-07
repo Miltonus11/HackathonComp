@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/auth/', include('accounts.urls')),
     path('api/', include('core.urls')),
     path('api/screening/', include('screening.urls')),
+    path('api/', include('referrals.urls')),
 ]

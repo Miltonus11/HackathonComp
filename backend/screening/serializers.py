@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-INSTRUMENT_CODES = ['WHO5', 'GAD7', 'PHQ9']
+INSTRUMENT_CODES = ['WHO5', 'GAD7', 'PHQ9', 'PHQ9_ITEM9']
 
 
 class ResponseItemSerializer(serializers.Serializer):

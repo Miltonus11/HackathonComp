@@ -2,7 +2,8 @@ from rest_framework.test import APITestCase
 
 from safety.models import Escalation, RiskFlag
 
-from .helpers import (GAD7_MINIMAL, PHQ9_MINIMAL, WHO5_GOOD, WHO5_POOR, make_user, phq9_item9_only, seed)
+from .helpers import (GAD7_MINIMAL, ITEM9_NEGATIVE, ITEM9_POSITIVE, PHQ9_MINIMAL, WHO5_GOOD, WHO5_POOR, make_user,
+                      phq9_item9_only, seed)
 
 SESSIONS = '/api/screening/sessions/'
 
@@ -53,7 +54,7 @@ class StartTests(ScreeningApiBase):
 
 
 class FlowTests(ScreeningApiBase):
-    def test_good_wellbeing_path_skips_phq9(self):
+    def test_good_wellbeing_path_skips_phq9_but_asks_item9(self):
         sid = self.start()['session_id']
         r1 = self.answer(sid, 'WHO5', WHO5_GOOD)
         self.assertEqual(r1.status_code, 200, r1.data)
@@ -62,10 +63,25 @@ class FlowTests(ScreeningApiBase):
         self.assertEqual(r1.data['result']['scaled_score'], '80.0')
         self.assertIsNone(r1.data['crisis'])
         r2 = self.answer(sid, 'GAD7', GAD7_MINIMAL)
-        self.assertTrue(r2.data['completed'])
-        self.assertIsNone(r2.data['next'])
-        self.assertIn('headline', r2.data['result']['advice'])
-        self.assertNotIn('combined_score', r2.data)
+        self.assertFalse(r2.data['completed'])
+        self.assertEqual(r2.data['next']['instrument'], 'PHQ9_ITEM9')
+        self.assertEqual(len(r2.data['next']['items']), 1)
+        self.assertEqual(len(r2.data['next']['options']), 4)
+        r3 = self.answer(sid, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
+        self.assertTrue(r3.data['completed'])
+        self.assertIsNone(r3.data['next'])
+        self.assertIsNone(r3.data['crisis'])
+        self.assertIn('headline', r3.data['result']['advice'])
+        self.assertNotIn('combined_score', r3.data)
+
+    def test_good_wellbeing_with_item9_positive_returns_crisis(self):
+        sid = self.start()['session_id']
+        self.answer(sid, 'WHO5', WHO5_GOOD)
+        self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        res = self.answer(sid, 'PHQ9_ITEM9', ITEM9_POSITIVE)
+        self.assertTrue(res.data['crisis']['hotlines'])
+        self.assertTrue(res.data['completed'])
+        self.assertEqual(RiskFlag.objects.get().level, 'CRISIS')
 
     def test_poor_wellbeing_path_adds_phq9(self):
         sid = self.start()['session_id']
@@ -111,6 +127,7 @@ class FlowTests(ScreeningApiBase):
         sid = self.start()['session_id']
         self.answer(sid, 'WHO5', WHO5_GOOD)
         self.answer(sid, 'GAD7', GAD7_MINIMAL)
+        self.answer(sid, 'PHQ9_ITEM9', ITEM9_NEGATIVE)
         res = self.answer(sid, 'WHO5', WHO5_GOOD)
         self.assertEqual((res.status_code, res.data['code']), (409, 'session_complete'))
 
